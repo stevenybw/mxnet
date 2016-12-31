@@ -12,6 +12,7 @@
 #include <set>
 #include "./graph_executor.h"
 #include "./graph_algorithm.h"
+#include "../common/tracing_context.h"
 
 namespace mxnet {
 /*!
@@ -1169,8 +1170,74 @@ Executor *Executor::Bind(Symbol symbol,
                          const std::vector<NDArray> &aux_states,
                          Executor* shared_exec) {
   GraphExecutor *exec = new GraphExecutor();
+
   exec->Init(symbol, default_ctx, group2ctx,
              in_args, arg_grad_store, grad_req_type, aux_states, shared_exec);
+
+  using namespace common;
+  int64_t task_id = _tracing_context.nextTaskId();
+  int64_t partition_id = 0;
+  int64_t num_partitions = 1;
+  string task_name;
+  symbol.GetName(&task_name);
+
+  auto ctx_to_string = [](Context ctx) -> string {
+    string ret;
+    switch(ctx.dev_type) {
+    case Context::kCPU:
+      ret.append("cpu");
+      break;
+    case Context::kGPU:
+      ret.append("gpu");
+      break;
+    default:
+      ret.append("unk");
+      break;
+    }
+    ret.append(std::to_string(ctx.dev_id));
+    return ret;
+  };
+
+  task_name.append(ctx_to_string(default_ctx));
+
+  if (_tracing_context.Enabled()) {
+    const StaticGraph& graph = exec->graph_;
+    const std::vector<StaticGraph::Node>& nodes = graph.nodes;
+    const std::vector<GraphExecutor::OpNode> op_nodes = exec->op_nodes_;
+    const std::vector<uint32_t>& topo_order = exec->topo_order_;
+    std::vector<std::vector<uint32_t>> output_ids;
+    int num_nodes = nodes.size();
+    output_ids.resize(num_nodes);
+    for(int id=0; id<num_nodes; id++) {
+      for(auto input: nodes[id].inputs) {
+        output_ids[input.source_id].push_back(id);
+      }
+    }
+
+    std::ostream& out = _tracing_context.MetaStream();
+    out << MetaEventType::META_NEW_TASK << SEP << task_id << SEP << num_partitions << SEP << task_name << "\n";
+    out << MetaEventType::META_NEW_PARTITION << SEP << task_id << SEP << partition_id << SEP << "DEFAULT" << "\n";
+
+    for (auto id : topo_order) {
+      const string name = nodes[id].name;
+      string type;
+      if(nodes[id].op != NULL) {
+        type = nodes[id].op->TypeString();
+      } else {
+        type = "NoOp";
+      }      
+      const string device = ctx_to_string(op_nodes[id].ctx);
+      string key_prefix = "E";
+      out << MetaEventType::META_NEW_NODE << SEP << task_id << SEP << partition_id << SEP
+          << id << SEP << name << SEP << type << SEP << device << SEP << key_prefix << "\n";
+      out << MetaEventType::META_ASSIGN_NODE_CHILDREN;
+      for(int out_id : output_ids[id]) {
+        out << SEP << out_id;
+      }
+      out << "\n";
+    }
+  }
+
   return exec;
 }
 }  // namespace mxnet

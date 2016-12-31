@@ -42,7 +42,7 @@ class GraphStorageAllocator {
   /*! \brief resource index */
   typedef int64_t StorageID;
   /*! \brief bad storage id */
-  static const StorageID kBadStorageID = -1;
+  static const StorageID kBadStorageID;
   /*! \brief dummy color for shared mem */
   static const uint32_t kDummyColor;
   /*! \brief constructor to the graph memory allocator */

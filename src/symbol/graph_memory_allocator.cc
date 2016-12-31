@@ -7,6 +7,7 @@
 
 namespace mxnet {
 const uint32_t GraphStorageAllocator::kDummyColor = 1 << 31;
+const GraphStorageAllocator::StorageID GraphStorageAllocator::kBadStorageID = -1;
 
 GraphStorageAllocator::GraphStorageAllocator(
     StaticGraph *graph,

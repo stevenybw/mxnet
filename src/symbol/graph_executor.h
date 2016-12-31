@@ -26,6 +26,14 @@ namespace mxnet {
  * \brief Executor of a computation graph.
  */
 class GraphExecutor : public Executor {
+  friend Executor *Executor::Bind(Symbol symbol,
+      const Context& default_ctx,
+      const std::map<std::string, Context>& group2ctx,
+      const std::vector<NDArray> &in_args,
+      const std::vector<NDArray> &arg_grad_store,
+      const std::vector<OpReqType> &grad_req_type,
+      const std::vector<NDArray> &aux_states,
+      Executor* shared_exec);
  public:
   GraphExecutor() {}
   virtual ~GraphExecutor();
