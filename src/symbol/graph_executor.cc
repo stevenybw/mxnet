@@ -1198,6 +1198,21 @@ Executor *Executor::Bind(Symbol symbol,
     return ret;
   };
 
+  auto exec_type_to_string = [](Operator::ExecType op) -> string {
+    switch(op) {
+    case Operator::ExecType::kSync:
+      return "kSync";
+      break;
+    case Operator::ExecType::kAsync:
+      return "kAsync";
+      break;
+    case Operator::ExecType::kCrossDeviceCopy:
+      return "kCrossDeviceCopy";
+    default:
+      return "kUnkown";
+    }
+  };
+
   task_name.append(ctx_to_string(default_ctx));
 
   if (_tracing_context.Enabled()) {
@@ -1220,16 +1235,34 @@ Executor *Executor::Bind(Symbol symbol,
 
     for (auto id : topo_order) {
       const string name = nodes[id].name;
+      // node's type
       string type;
-      if(nodes[id].op != NULL) {
+
+      // node's execution type
+      string exec_type;
+      if(nodes[id].op != nullptr) {
         type = nodes[id].op->TypeString();
+        exec_type = exec_type_to_string(op_nodes[id].op->exec_type());
       } else {
-        type = "NoOp";
+        if(nodes[id].is_backward()) {
+          int source_id = nodes[id].backward_source_id;
+          // assertion for backward node
+          assert(source_id != -1);
+          assert(nodes[source_id].op != nullptr);
+          type = "Backward@" + nodes[source_id].op->TypeString();
+          exec_type = exec_type_to_string(op_nodes[source_id].op->exec_type());
+        } else if (nodes[id].is_variable()){
+          type = "Variable";
+          exec_type = "NA";
+        } else {
+          type = "NoOp";
+          exec_type = "NA";
+        }
       }      
       const string device = ctx_to_string(op_nodes[id].ctx);
       string key_prefix = "E";
       out << MetaEventType::META_NEW_NODE << SEP << task_id << SEP << partition_id << SEP
-          << id << SEP << name << SEP << type << SEP << device << SEP << key_prefix << "\n";
+          << id << SEP << name << SEP << type << SEP << exec_type << device << SEP << key_prefix << "\n";
       out << MetaEventType::META_ASSIGN_NODE_CHILDREN;
       for(int out_id : output_ids[id]) {
         out << SEP << out_id;
